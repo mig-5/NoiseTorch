@@ -1,0 +1,7 @@
+*.exe
+*.syso
+dist/
+driver/build/
+driver/*.cat
+driver/*.cer
+driver/*.pfx

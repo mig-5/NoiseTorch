@@ -21,6 +21,11 @@ NoiseTorch-ng is an easy to use open source application for Linux with PulseAudi
 
 Don't forget to leave a star ⭐ if this sounds useful to you! 
 
+> **Windows port (this fork):** a native Windows implementation lives under
+> [`windows/`](windows/README.md). It replaces PulseAudio/PipeWire with WASAPI +
+> RNNoise and ships the NT-VAD virtual audio driver. The original Linux
+> application is unchanged.
+
 ## Regarding the recent security incident
 
 Due to a suspected security breach of the update server and code repository, there's
