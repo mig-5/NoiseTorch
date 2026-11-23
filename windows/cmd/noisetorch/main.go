@@ -101,10 +101,10 @@ func (a *app) build() error {
 			},
 			Label{Text: "Voice activation threshold (higher = only speech passes):"},
 			Slider{
-				AssignTo:      &a.slider,
-				MinValue:      0,
-				MaxValue:      100,
-				Value:         95,
+				AssignTo:       &a.slider,
+				MinValue:       0,
+				MaxValue:       95,
+				Value:          95,
 				OnValueChanged: func() { a.onThreshold() },
 			},
 			Composite{
@@ -224,12 +224,12 @@ func (a *app) updateStatus() {
 			a.status.SetText("Idle")
 			return
 		}
-		vad := a.engine.LastVAD() * 100
+		vad, open := a.engine.LastStats()
 		state := "muted"
-		if vad >= float32(a.slider.Value()) {
+		if open {
 			state = "passing"
 		}
-		a.status.SetText(fmt.Sprintf("Running - voice activity %.0f%% (%s)", vad, state))
+		a.status.SetText(fmt.Sprintf("Running - voice activity %.0f%% (%s)", vad*100, state))
 	})
 }
 

@@ -68,9 +68,10 @@ func (d *Denoiser) ProcessFrame(samples []float32) (float32, error) {
 		return 0, errors.New("rnnoise: denoiser is closed")
 	}
 
-	// RNNoise works on unscaled float PCM but internally scales by 32768.
+	// RNNoise works on 16-bit-range float PCM; use the same 32767 scale as the
+	// upstream NoiseTorch LADSPA module so levels match the Linux build.
 	for i := 0; i < FrameSize; i++ {
-		d.buf[i] = samples[i] * 32768.0
+		d.buf[i] = samples[i] * 32767.0
 	}
 
 	vad := C.rnnoise_process_frame(
@@ -80,7 +81,7 @@ func (d *Denoiser) ProcessFrame(samples []float32) (float32, error) {
 	)
 
 	for i := 0; i < FrameSize; i++ {
-		samples[i] = d.buf[i] / 32768.0
+		samples[i] = d.buf[i] / 32767.0
 	}
 	return float32(vad), nil
 }
