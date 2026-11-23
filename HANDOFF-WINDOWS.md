@@ -144,10 +144,48 @@ Attestation/EV (Partner Center). Test-signing só serve para desenvolvimento.
 - O endpoint virtual só existe **depois de instalar o driver**; sem ele o app
   ainda funciona apontando para uma saída real (monitoração).
 
-## 8. Prompt sugerido para retomar com o assistente
+## 8. Sessão 2 — retomada em Windows (2026-11-22)
+
+### Ambiente preparado nesta máquina
+- Go 1.27.4 (`winget install GoLang.Go`).
+- MinGW-w64 16.2 POSIX/UCRT (`winget install BrechtSanders.WinLibs.POSIX.UCRT`);
+  fornece `x86_64-w64-mingw32-gcc`.
+
+### Verificado em Windows 11
+- `go vet ./...` e `go test ./...` passam (inclui testes novos do RNNoise).
+- App compila nativo (não só cross-compile) e gera
+  `dist\noisetorch-windows.exe`.
+- GUI abre, fica responsiva e fecha limpa (3 execuções).
+- `dist\ntdiag.exe -list` enumera microfones e saídas WASAPI reais.
+- `dist\ntdiag.exe -monitor 3s` executou o pipeline completo
+  captura → RNNoise → reprodução, com RMS/VAD/gate por callback.
+
+### Correções feitas nesta sessão
+- **Bug crítico do build**: o `.syso` do manifest era gerado em `windows/`, mas
+  `package main` está em `windows/cmd/noisetorch/`; o linker ignorava o manifest
+  e a GUI morria com `TTM_ADDTOOL failed`. `build-app.ps1` agora gera em
+  `cmd/noisetorch/` e também compila o `ntdiag`.
+- Paridade de VAD com `c/ladspa/module.c`: escala 32767 (não 32768), threshold
+  limitado a 95, grace period de 20 frames (400 ms) e threshold 0 desliga o
+  gate. GUI usa o estado real do gate (`LastStats`).
+- Guards de buffer no callback duplex e exposição de `LastLevel`/`LastStats`.
+- Novos: `cmd/ntdiag` (diagnóstico console) e `internal/rnnoise/rnnoise_test.go`.
+- `README.md` do `windows/` atualizado (status real, uso do `ntdiag`, aviso
+  inofensivo de manifest duplicado do MinGW).
+
+### Pendências (inalteradas)
+1. **Driver NT-VAD**: continua scaffold. Próximo passo recomendado é adaptar o
+   sample SYSVAD (WaveRT position-accurate) e trocar o caminho de hardware por
+   `NTVadLoopbackWrite`/`NTVadLoopbackRead` de `driver/loopback.h`. Requer
+   Visual Studio 2022 + WDK nesta máquina.
+2. Sem o driver, o `ntdiag`/GUI só validam em modo monitoração (mic → saída real).
+3. Empacotamento/instalador e assinatura de produção ainda não feitos.
+
+## 9. Prompt sugerido para retomar com o assistente
 
 > Estou retomando o port do NoiseTorch para Windows no fork
-> `mig-5/NoiseTorch`, branch `windows-native` (commit `1de1069`). Leia
-> `HANDOFF-WINDOWS.md` e `windows/README.md`. O app Go já cross-compila para
-> windows/amd64. Agora quero [completar o driver NT-VAD a partir do sample
-> SYSVAD / rodar e depurar o app no Windows / empacotar um instalador].
+> `mig-5/NoiseTorch`, branch `windows-native`. Leia `HANDOFF-WINDOWS.md` e
+> `windows/README.md`. O app já compila e roda no Windows (GUI + `ntdiag`);
+> o pipeline WASAPI+RNNoise foi validado em modo monitoração. Agora quero
+> [completar o driver NT-VAD a partir do sample SYSVAD / empacotar um
+> instalador / adicionar captura de dispositivo por padrão na GUI].

@@ -24,13 +24,22 @@ PulseAudio or PipeWire. Instead it uses:
 
 | Component | State |
 |-----------|-------|
-| Go engine (`internal/audio`, `internal/rnnoise`) | Compiles for `windows/amd64` (cgo + MinGW). |
-| GUI (`cmd/noisetorch`, `lxn/walk`) | Compiles for `windows/amd64`. |
+| Go engine (`internal/audio`, `internal/rnnoise`) | Built and **runtime-tested** on Windows 11 (`windows/amd64`, Go 1.27, MinGW-w64 16.2). |
+| GUI (`cmd/noisetorch`, `lxn/walk`) | Built and launched/closed cleanly on Windows 11. |
+| RNNoise binding | Unit-tested (`go test ./...`): silence, noise, wrong-size and closed-state behaviour. |
 | Kernel driver (`driver/`) | **Reference scaffold** — must be built with the WDK and validated on a test machine. See `driver/README.md`. |
 
-The Go binary was cross-compiled in CI-style on Linux (`CGO_ENABLED=1
-GOOS=windows CC=x86_64-w64-mingw32-gcc`). It has not been runtime-tested on a
-Windows machine as part of this change.
+Verified in the Windows session:
+
+- `go vet ./...` and `go test ./...` pass.
+- `ntdiag -list` enumerates real WASAPI capture/playback endpoints.
+- `ntdiag -monitor 3s` runs the full duplex capture → RNNoise → playback pipeline
+  and prints per-callback RMS, VAD probability and gate state.
+- The GUI starts, stays responsive and exits cleanly when the window is closed.
+
+The RNNoise VAD gating matches the Linux LADSPA module: the threshold is capped
+at 95, frames above it open a 400 ms grace window (`VAD_GRACE_PERIOD`), and a
+threshold of 0 disables gating.
 
 ## Build the application
 
@@ -40,14 +49,36 @@ Requirements: Go 1.21+, MinGW-w64 (`x86_64-w64-mingw32-gcc`), PowerShell.
 cd windows
 .\build-app.ps1
 # -> ..\dist\noisetorch-windows.exe
+# -> ..\dist\ntdiag.exe
 ```
 
 Or manually:
 
 ```powershell
 $env:CGO_ENABLED = "1"
+go run github.com/akavel/rsrc@v0.10.2 -manifest noisetorch.manifest -o .\cmd\noisetorch\rsrc_windows_amd64.syso
 go build -ldflags "-s -w -H windowsgui" -o noisetorch.exe .\cmd\noisetorch
 ```
+
+> The manifest `.syso` **must** live next to `package main`
+> (`cmd/noisetorch/`); a copy in `windows/` is ignored by the linker and the
+> GUI then fails at startup with `TTM_ADDTOOL failed`. Modern MinGW-w64 emits a
+> harmless `.rsrc merge failure: multiple non-default manifests` warning because
+> GCC always links its own `default-manifest.o`; the embedded NoiseTorch
+> manifest is still the one Windows loads (Common Controls v6 works).
+
+### Diagnose without the GUI
+
+`ntdiag` is a console tool for validating devices and the audio pipeline:
+
+```powershell
+.\dist\ntdiag.exe -list
+.\dist\ntdiag.exe -list=false -monitor 5s -threshold 50 `
+  -capture "Microphone" -playback "NoiseTorch Virtual Microphone"
+```
+
+`-capture`/`-playback` are case-insensitive name substrings; omit them to use
+the system defaults. `-threshold 0` disables VAD gating.
 
 ## Build & install the driver
 
