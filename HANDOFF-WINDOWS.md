@@ -102,32 +102,40 @@ Teste rápido sem driver: rode o app e selecione, como "Virtual microphone",
 qualquer saída de áudio real (ex.: seus fones) — você deve **ouvir** o mic
 filtrado (modo monitoração), confirmando que o pipeline WASAPI+RNNoise funciona.
 
-### 6.2 Driver — decisão importante
+### 6.2 Driver — abordagem adotada (sessão 3)
 
-O scaffold atual **não está pronto para produção**. Recomendação do próprio
-`driver/README.md`: partir do sample **SYSVAD** da Microsoft (WaveRT completo e
-position-accurate) e **substituir apenas o caminho de hardware** pelas funções de
-`windows/driver/loopback.h`:
+O scaffold manual foi **descartado e removido**: era incompilável
+(`CUnknown::NonDelegatingAddRef`, `IMiniportWaveRTStream::Init` inexistente,
+`GetDescription` com tipo errado). A solução agora é uma **derivação
+reproduzível do sample SYSVAD**, em `windows/driver/ntvad/`:
 
-- Render: copiar do buffer WaveRT para o ring → `NTVadLoopbackWrite`.
-- Capture: copiar do ring para o buffer WaveRT → `NTVadLoopbackRead`.
-- Manter o INF (`NTVad.inf`) e o `loopback.h` como estão.
-
-Alternativa: completar `miniport.cpp`/`adapter.cpp` (mais trabalhoso e arriscado).
+- `apply-sysvad.ps1` clona o commit pinado
+  `d49bb7d72f3651952b2b6e4ad28d14fe2247eb69`, copia `audio/sysvad` para
+  `ntvad/src/` e aplica deltas verificados (endpoints só Speaker/MicIn, ring no
+  lugar do tom/dump, init no `DriverEntry`, projeto inclui `ntvad_loopback.cpp`).
+- `NTVad.inf` escrito à mão: `Root\NTVad`, MEDIA, KMDF 1.15, interfaces de
+  Wave/Topology para reprodução e gravação.
+- Ring de 64 KiB em `ntvad_loopback.{h,cpp}` (PCM bruto, spin lock); o lado de
+  captura descarta backlog acima de 4 KiB para não herdar latência permanente.
 
 ### 6.3 Build/instalação do driver
 
 Requisitos: Visual Studio 2022 (C++) + WDK.
 
 ```powershell
-cd windows\driver
-.\build.ps1 -Platform x64 -TestSign   # dev: assina com cert local + testsigning
+cd windows\driver\ntvad
+.\apply-sysvad.ps1              # gera src/ a partir do SYSVAD pinado
+.\build.ps1 -TestSign           # MSBuild + inf2cat + cert local + testsigning
 # reiniciar o Windows
-.\install.ps1 -Path .\build\x64\Release
+.\install.ps1                   # devcon install Root\NTVad
 ```
 
-Depois: Configurações de Som → deve aparecer "NoiseTorch Virtual Microphone"
-como reprodução **e** gravação.
+Depois: Configurações de Som → deve aparecer "NoiseTorch Virtual Cable
+(Playback)" e "(Recording)".
+
+> Ambos os endpoints precisam negociar o **mesmo formato** (taxa/canais/bit
+> depth), pois o ring guarda PCM bruto. O app abre o render no mix format do
+> capture.
 
 Produção: assinar `NTVad.sys` e `NTVad.cat` com certificado Microsoft
 Attestation/EV (Partner Center). Test-signing só serve para desenvolvimento.
@@ -181,7 +189,44 @@ Attestation/EV (Partner Center). Test-signing só serve para desenvolvimento.
 2. Sem o driver, o `ntdiag`/GUI só validam em modo monitoração (mic → saída real).
 3. Empacotamento/instalador e assinatura de produção ainda não feitos.
 
-## 9. Prompt sugerido para retomar com o assistente
+## 9. Sessão 3 — driver derivado do SYSVAD (2026-11-23)
+
+### Decisão
+- "Só escrever o driver agora": código pronto, **sem compilar** (VS/WDK
+  ausentes). Validação de build fica para quando o WDK for instalado.
+- Scaffold manual deletado; driver passou a ser derivação do SYSVAD.
+
+### Verificado nesta sessão
+- `apply-sysvad.ps1 -Source <clone>` executou e **todos os patches casaram**
+  contra o commit pinado (asserts de contagem de match).
+- Árvore gerada confere: tabelas de endpoints só com Speaker/MicIn; capture lê o
+  ring; render escreve no ring; `ReadBytes` sem guarda de dump; `DriverEntry`
+  inicializa o ring; `.vcxproj` inclui `ntvad_loopback.cpp`.
+- Formato unificado: as 3 tabelas PCM do speaker (host/offload/audio engine) e
+  as 8 entradas do mic ficaram 48 kHz/16-bit/estéreo; o pin de captura virou
+  estéreo (`MICIN_DEVICE_MAX_CHANNELS 2`, `KSAUDIO_SPEAKER_STEREO`, blockAlign 4)
+  e os ranges de taxa foram fixados em 48000. Assim os dois endpoints só expõem
+  um formato e o PCM cru no ring sempre casa.
+- `apply-sysvad.ps1` falha de forma explícita se o upstream mudar (âncoras).
+
+### Arquivos novos em `windows/driver/ntvad/`
+`ntvad_loopback.h`, `ntvad_loopback.cpp`, `apply-sysvad.ps1`, `NTVad.inf`,
+`build.ps1`, `install.ps1`; `windows/driver/README.md` reescrito; `.gitignore`
+ignora `src/`, `sysvad/`, `build/`.
+
+### Não verificado
+- Compilação do driver, `inf2cat`, assinatura e instalação (sem WDK).
+- Se o PortCls aceita o INF hand-written (KmdfLibraryVersion 1.15 fixo).
+- Comportamento em tempo real (glitch/underflow) e se o PortCls/Windows aceita
+  a lista de formatos com entradas duplicadas (48 kHz repetido) sem reclamar.
+
+### Próximo passo
+1. Instalar VS 2022 Build Tools + WDK 22621.
+2. `ntvad\build.ps1 -TestSign`, reiniciar, `install.ps1`.
+3. Corrigir erros de compilação do SYSVAD derivado (esperados: nomes de
+   include/libs do projeto) e validar os dois endpoints em Configurações de Som.
+
+## 10. Prompt sugerido para retomar com o assistente
 
 > Estou retomando o port do NoiseTorch para Windows no fork
 > `mig-5/NoiseTorch`, branch `windows-native`. Leia `HANDOFF-WINDOWS.md` e

@@ -1,0 +1,148 @@
+; NoiseTorch Virtual Audio Device (NT-VAD)
+; Copyright (c) 2026 NoiseTorch-Windows contributors. GPL-3.0.
+;
+; The binary is a SYSVAD-derived PortCls/KMDF audio adapter
+; (see apply-sysvad.ps1). It is root-enumerated and exposes exactly one
+; render endpoint and one capture endpoint, joined by a kernel ring buffer.
+;
+; Render  ("NoiseTorch Virtual Cable (Playback)")  <- NoiseTorch engine
+; Capture ("NoiseTorch Virtual Cable (Recording)") -> conferencing apps
+
+[Version]
+Signature="$WINDOWS NT$"
+Class=MEDIA
+ClassGuid={4d36e96c-e325-11ce-bfc1-08002be10318}
+Provider=%ManufacturerName%
+CatalogFile=NTVad.cat
+DriverVer=01/01/2026,0.1.0.0
+PnpLockDown=1
+
+[SourceDisksNames]
+222="NoiseTorch NT-VAD Driver Disk","",222
+
+[SourceDisksFiles]
+NTVad.sys=222
+
+[DestinationDirs]
+NTVAD_Device.CopyList=13
+
+[Manufacturer]
+%ManufacturerName%=NTVAD,NTamd64.10.0...22621
+
+[NTVAD.NTamd64.10.0...22621]
+%NTVad.DeviceDesc%=NTVAD_Device, Root\NTVad
+
+[NTVAD_Device.NT]
+Include=ks.inf,wdmaudio.inf
+Needs=KS.Registration,WDMAUDIO.Registration
+CopyFiles=NTVAD_Device.CopyList
+AddReg=NTVAD_Device.AddReg
+
+[NTVAD_Device.CopyList]
+NTVad.sys
+
+[NTVAD_Device.AddReg]
+HKR,,AssociatedFilters,,"wdmaud,swmidi,redbook"
+HKR,,Driver,,NTVad.sys
+HKR,Drivers,SubClasses,,"wave,midi,mixer"
+HKR,Drivers\wave\wdmaud.drv,Driver,,wdmaud.drv
+HKR,Drivers\midi\wdmaud.drv,Driver,,wdmaud.drv
+HKR,Drivers\mixer\wdmaud.drv,Driver,,wdmaud.drv
+HKR,Drivers\wave\wdmaud.drv,Description,,%NTVad.DeviceDesc%
+HKR,Drivers\mixer\wdmaud.drv,Description,,%NTVad.DeviceDesc%
+
+[NTVAD_Device.NT.Interfaces]
+; Render side: WaveSpeaker / TopologySpeaker are the subdevice names that
+; minipairs.h registers.
+AddInterface=%KSCATEGORY_AUDIO%,    %KSNAME_WaveSpeaker%,     NTVAD.I.WaveSpeaker
+AddInterface=%KSCATEGORY_RENDER%,   %KSNAME_WaveSpeaker%,     NTVAD.I.WaveSpeaker
+AddInterface=%KSCATEGORY_REALTIME%, %KSNAME_WaveSpeaker%,     NTVAD.I.WaveSpeaker
+AddInterface=%KSCATEGORY_AUDIO%,    %KSNAME_TopologySpeaker%, NTVAD.I.TopologySpeaker
+AddInterface=%KSCATEGORY_TOPOLOGY%, %KSNAME_TopologySpeaker%, NTVAD.I.TopologySpeaker
+; Capture side.
+AddInterface=%KSCATEGORY_AUDIO%,    %KSNAME_WaveMicIn%,       NTVAD.I.WaveMicIn
+AddInterface=%KSCATEGORY_REALTIME%, %KSNAME_WaveMicIn%,       NTVAD.I.WaveMicIn
+AddInterface=%KSCATEGORY_CAPTURE%,  %KSNAME_WaveMicIn%,       NTVAD.I.WaveMicIn
+AddInterface=%KSCATEGORY_AUDIO%,    %KSNAME_TopologyMicIn%,   NTVAD.I.TopologyMicIn
+AddInterface=%KSCATEGORY_TOPOLOGY%, %KSNAME_TopologyMicIn%,   NTVAD.I.TopologyMicIn
+
+[NTVAD.I.WaveSpeaker]
+AddReg=NTVAD.I.WaveSpeaker.AddReg
+[NTVAD.I.WaveSpeaker.AddReg]
+HKR,,CLSID,,%Proxy.CLSID%
+HKR,,FriendlyName,,%NTVAD.WaveSpeaker.szPname%
+
+[NTVAD.I.TopologySpeaker]
+AddReg=NTVAD.I.TopologySpeaker.AddReg
+[NTVAD.I.TopologySpeaker.AddReg]
+HKR,,CLSID,,%Proxy.CLSID%
+HKR,,FriendlyName,,%NTVAD.TopologySpeaker.szPname%
+HKR,EP\0,%PKEY_AudioEndpoint_Association%,,%KSNODETYPE_ANY%
+HKR,EP\0,%PKEY_AudioEndpoint_Supports_EventDriven_Mode%,0x00010001,0x1
+
+[NTVAD.I.WaveMicIn]
+AddReg=NTVAD.I.WaveMicIn.AddReg
+[NTVAD.I.WaveMicIn.AddReg]
+HKR,,CLSID,,%Proxy.CLSID%
+HKR,,FriendlyName,,%NTVAD.WaveMicIn.szPname%
+
+[NTVAD.I.TopologyMicIn]
+AddReg=NTVAD.I.TopologyMicIn.AddReg
+[NTVAD.I.TopologyMicIn.AddReg]
+HKR,,CLSID,,%Proxy.CLSID%
+HKR,,FriendlyName,,%NTVAD.TopologyMicIn.szPname%
+HKR,EP\0,%PKEY_AudioEndpoint_Association%,,%KSNODETYPE_ANY%
+HKR,EP\0,%PKEY_AudioEndpoint_Supports_EventDriven_Mode%,0x00010001,0x1
+
+[NTVAD_Device.NT.Services]
+AddService=NTVad,0x00000002,NTVad_Service_Inst
+
+[NTVad_Service_Inst]
+DisplayName=%NTVad.ServiceDesc%
+ServiceType=1
+StartType=3
+ErrorControl=1
+ServiceBinary=%13%\NTVad.sys
+
+[NTVAD_Device.NT.HW]
+AddReg=AUDIOHW.AddReg
+
+[AUDIOHW.AddReg]
+; FILE_DEVICE_SOUND
+HKR,,DeviceType,0x10001,0x0000001D
+; SDDL_DEVOBJ_SYS_ALL_ADM_RWX_WORLD_RWX_RES_RWX
+HKR,,Security,,"D:P(A;;GA;;;SY)(A;;GRGWGX;;;BA)(A;;GRGWGX;;;WD)(A;;GRGWGX;;;RC)"
+
+[NTVAD_Device.NT.Wdf]
+KmdfService = NTVad, NTVAD_WdfSect
+
+[NTVAD_WdfSect]
+KmdfLibraryVersion = 1.15
+
+[Strings]
+; Non-localizable
+KSNAME_WaveSpeaker="WaveSpeaker"
+KSNAME_TopologySpeaker="TopologySpeaker"
+KSNAME_WaveMicIn="WaveMicIn"
+KSNAME_TopologyMicIn="TopologyMicIn"
+
+Proxy.CLSID="{17CCA71B-ECD7-11D0-B908-00A0C9223196}"
+KSCATEGORY_AUDIO="{6994AD04-93EF-11D0-A3CC-00A0C9223196}"
+KSCATEGORY_RENDER="{65E8773E-8F56-11D0-A3B9-00A0C9223196}"
+KSCATEGORY_CAPTURE="{65E8773D-8F56-11D0-A3B9-00A0C9223196}"
+KSCATEGORY_REALTIME="{EB115FFC-10C8-4964-831D-6DCB02E6F23F}"
+KSCATEGORY_TOPOLOGY="{DDA54A40-1E4C-11D1-A050-405705C10000}"
+
+KSNODETYPE_ANY="{00000000-0000-0000-0000-000000000000}"
+PKEY_AudioEndpoint_Association="{1DA5D803-D492-4EDD-8C23-E0C0FFEE7F0E},2"
+PKEY_AudioEndpoint_Supports_EventDriven_Mode="{1DA5D803-D492-4EDD-8C23-E0C0FFEE7F0E},7"
+
+; Localizable
+ManufacturerName="NoiseTorch"
+NTVad.DeviceDesc="NoiseTorch Virtual Audio Device"
+NTVad.ServiceDesc="NoiseTorch Virtual Audio Device Driver"
+
+NTVAD.WaveSpeaker.szPname="NoiseTorch Virtual Cable (Playback)"
+NTVAD.TopologySpeaker.szPname="NoiseTorch Virtual Cable (Playback)"
+NTVAD.WaveMicIn.szPname="NoiseTorch Virtual Cable (Recording)"
+NTVAD.TopologyMicIn.szPname="NoiseTorch Virtual Cable (Recording)"

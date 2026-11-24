@@ -4,3 +4,8 @@ licenses.go
 .vscode
 *.sublime-workspace
 *.sublime-project
+
+# Generated NT-VAD driver tree (see windows/driver/ntvad/apply-sysvad.ps1)
+windows/driver/ntvad/src/
+windows/driver/ntvad/sysvad/
+windows/driver/ntvad/build/

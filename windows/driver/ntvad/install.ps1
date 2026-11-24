@@ -1,11 +1,13 @@
 #requires -RunAsAdministrator
 <#
 .SYNOPSIS
-    Installs / removes the NoiseTorch Virtual Audio Device (NT-VAD).
+    Installs or removes the NoiseTorch NT-VAD root-enumerated audio device.
+
 .PARAMETER Path
     Directory containing NTVad.inf, NTVad.sys and NTVad.cat.
+
 .PARAMETER Uninstall
-    Remove the device and its driver package.
+    Remove the device and delete the driver package.
 #>
 param(
     [string]$Path = (Join-Path $PSScriptRoot 'build\x64\Release'),
@@ -23,23 +25,24 @@ function Get-DevCon {
 
 $devcon = Get-DevCon
 if (-not $devcon) {
-    throw "devcon.exe not found (install the WDK). Alternatively use 'pnputil /add-driver NTVad.inf /install' after manually adding a root device."
+    throw "devcon.exe not found (install the WDK), or create the root device manually and use 'pnputil /add-driver $Path\NTVad.inf /install'."
 }
 
 if ($Uninstall) {
-    Write-Host "==> Removing NT-VAD" -ForegroundColor Cyan
+    Write-Host '==> Removing NT-VAD' -ForegroundColor Cyan
     & $devcon remove $hwid
     & $devcon dp_delete (Join-Path $Path 'NTVad.inf')
-    Write-Host "Uninstalled. A reboot may be required." -ForegroundColor Green
+    Write-Host 'Uninstalled. A reboot may be required.' -ForegroundColor Green
     exit 0
 }
 
-if (-not (Test-Path (Join-Path $Path 'NTVad.inf'))) {
-    throw "NTVad.inf not found in $Path. Build the driver first (build.ps1)."
+$inf = Join-Path $Path 'NTVad.inf'
+foreach ($f in @($inf, (Join-Path $Path 'NTVad.sys'), (Join-Path $Path 'NTVad.cat'))) {
+    if (-not (Test-Path $f)) { throw "Missing $f. Run build.ps1 first." }
 }
 
 Write-Host "==> Installing NT-VAD from $Path" -ForegroundColor Cyan
-& $devcon install (Join-Path $Path 'NTVad.inf') $hwid
+& $devcon install $inf $hwid
 if ($LASTEXITCODE -ne 0) { throw "devcon install failed (code $LASTEXITCODE)." }
 
-Write-Host "==> Installed. Look for 'NoiseTorch Virtual Microphone' in Sound settings." -ForegroundColor Green
+Write-Host "==> Installed. Look for 'NoiseTorch Virtual Cable' in Sound settings." -ForegroundColor Green

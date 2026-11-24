@@ -1,70 +1,91 @@
 # NT-VAD — NoiseTorch Virtual Audio Device
 
-A PortCls virtual audio driver that presents a render endpoint and a capture
-endpoint that are connected by a kernel ring buffer, so audio played into the
-device can be captured as a virtual microphone.
+A PortCls/KMDF virtual audio adapter that exposes one render endpoint and one
+capture endpoint joined by a kernel ring buffer. The NoiseTorch engine plays
+denoised audio into the render endpoint; conferencing apps record from the
+capture endpoint.
 
-## ⚠️ Status: reference scaffold
+The driver is **not written from scratch**. A correct, position-accurate WaveRT
+miniport is large and easy to get subtly wrong, so `ntvad/` is a small,
+reproducible delta on top of Microsoft's SYSVAD sample:
 
-The files here define the architecture, INF, build tooling and the loopback data
-path (`loopback.h`). The WaveRT miniport (`miniport.cpp`, `adapter.cpp`) is a
-**reference implementation that has not been compiled or validated**. Windows
-kernel audio drivers are not compiled as part of the Go build. Before this can
-be shipped you must, on a Windows development machine:
+| Delta | Effect |
+|-------|--------|
+| Endpoint tables keep only `SpeakerMiniports` / `MicInMiniports` | One playback + one recording endpoint instead of the sample's demo set |
+| Capture `WriteBytes` reads the loopback ring (silence on underrun) | The microphone produces the cable's audio instead of a sine tone |
+| Render `ReadBytes` writes the loopback ring | Audio played into the cable is published to the microphone side |
+| `NtvadLoopbackInitialize` called from `DriverEntry` | Ring and spin lock are ready before any stream starts |
+| All PCM format tables collapsed to 48 kHz/16-bit/stereo; capture pin switched to stereo | Both endpoints expose one identical format, so raw PCM in the ring always matches |
+| `NTVad.inf` | Root-enumerated `Root\NTVad` MEDIA device, KMDF service, endpoint interfaces |
 
-1. Build with the WDK (`build.ps1`) and fix any WDK-version API differences.
-2. Replace the timer-driven data path with a position-accurate WaveRT
-   implementation (or wire the loopback into the WaveRT notification model).
-3. Complete the filter/pin descriptors and `PcRegisterSubdevice` calls in
-   `adapter.cpp` (currently stubbed).
-4. Test signing, then production signing.
+Everything else (WaveRT position reporting, notification timers, topology,
+power management) comes from SYSVAD unchanged.
 
-The intended, simplest robust alternative is to adapt the Microsoft **SYSVAD**
-sample's WaveRT miniport (which is complete and position-accurate) and replace
-its hardware data path with `NTVadLoopbackWrite` / `NTVadLoopbackRead` from
-`loopback.h`. That keeps the proven WaveRT plumbing and adds only the virtual
-cable loopback.
+## Status
+
+- The derivation script runs and all patches apply cleanly against upstream
+  commit `d49bb7d72f3651952b2b6e4ad28d14fe2247eb69` (verified).
+- **The driver has not been compiled.** Visual Studio 2022 + WDK are not
+  installed on the current machine, so build-time correctness is unverified.
+
+## Requirements
+
+- Visual Studio 2022 with **Desktop development with C++**
+- Windows Driver Kit (`winget install Microsoft.WindowsWDK.10.0.22621`)
+- Administrator PowerShell for build signing and install
+
+## Usage
+
+```powershell
+cd windows\driver\ntvad
+.\apply-sysvad.ps1        # fetch pinned SYSVAD and generate .\src
+.\build.ps1 -TestSign     # build NTVad.sys, catalog, sign, enable test signing
+.\install.ps1             # devcon install Root\NTVad  (reboot after test signing)
+```
+
+`build.ps1 -Prepare` performs both steps. Regenerating `src` discards local
+edits there by design; change the delta in `apply-sysvad.ps1` instead.
+
+## Format contract
+
+The ring stores raw PCM bytes, so both endpoints must negotiate the **same
+format**. Windows chooses each endpoint's mix format independently, so the
+derivation collapses every PCM entry in the speaker (host, offload, audio
+engine) and microphone format tables to a single **48 kHz / 16-bit / stereo**
+format and switches the microphone pin from mono to stereo. Both endpoints
+therefore expose exactly one format and cannot disagree.
+
+Apps in shared mode are resampled to 48 kHz stereo by the audio engine before
+reaching the endpoints; the endpoints' Advanced format choice no longer affects
+the cable. The NoiseTorch app opens the render endpoint using the capture
+endpoint's mix format, which is now always 48 kHz/16-bit/stereo.
+
+## Data path
+
+```
+apps --render--> WaveSpeaker DMA --ReadBytes--> NTVadLoopbackWrite --> ring
+apps <--capture-- WaveMicIn DMA <--WriteBytes-- NtvadLoopbackRead  <-- ring
+```
+
+The ring is 64 KiB (≈341 ms of 48 kHz/16-bit/stereo). On overflow the oldest
+bytes are dropped; on underrun the capture side reads silence. The capture side
+also never replays more than 4 KiB (≈21 ms at that format) of backlog, so a
+recorder that starts after playback does not inherit a permanent delay.
 
 ## Files
 
 | File | Purpose |
 |------|---------|
-| `loopback.h` | Lock-free single-producer/single-consumer mono float32 ring buffer. |
-| `miniport.h/.cpp` | WaveRT miniport + stream (render and capture share one ring). |
-| `adapter.cpp` | DriverEntry and subdevice registration. |
-| `NTVad.inf` | Root-enumerated MEDIA device `Root\NTVad`. |
-| `NTVad.vcxproj` | WDK kernel-mode driver project. |
-| `build.ps1` | Builds, catalogs and (optionally) test-signs the driver. |
-| `install.ps1` | Installs/removes the device using `devcon`. |
+| `ntvad/ntvad_loopback.h/.cpp` | Kernel ring buffer (spin-locked, DISPATCH_LEVEL safe). |
+| `ntvad/apply-sysvad.ps1` | Fetches the pinned SYSVAD and applies the delta into `src/`. |
+| `ntvad/NTVad.inf` | Device/service/endpoint definitions for `Root\NTVad`. |
+| `ntvad/build.ps1` | MSBuild + inf2cat + optional test signing. |
+| `ntvad/install.ps1` | devcon install/remove. |
 
-## Requirements
+Generated `ntvad/src/`, `ntvad/sysvad/` and `ntvad/build/` are git-ignored.
 
-- Visual Studio 2022 with **Desktop development with C++**
-- **Windows Driver Kit (WDK)** for Windows 10/11
-- Administrator PowerShell for build signing and install
+## Signing and distribution
 
-## Build
-
-```powershell
-.\build.ps1 -Platform x64 -TestSign
-```
-
-`-TestSign` creates a local self-signed certificate, signs `NTVad.sys` and
-`NTVad.cat`, and runs `bcdedit /set testsigning on` (reboot required).
-
-## Install
-
-```powershell
-.\install.ps1 -Path .\build\x64\Release
-```
-
-Then open **Sound settings**; you should see:
-
-- Playback: `NoiseTorch Virtual Microphone` (render side, used by the engine)
-- Recording: `NoiseTorch Virtual Microphone` (capture side, used by apps)
-
-## Uninstall
-
-```powershell
-.\install.ps1 -Path .\build\x64\Release -Uninstall
-```
+Test signing is development-only. A driver that loads on end-user machines
+needs a Microsoft-attested (Partner Center) or WHQL signature; plan for EV
+certificate onboarding before shipping.
