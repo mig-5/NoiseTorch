@@ -27,9 +27,9 @@ NTVad.sys=222
 NTVAD_Device.CopyList=13
 
 [Manufacturer]
-%ManufacturerName%=NTVAD,NTamd64.10.0...22621
+%ManufacturerName%=NTVAD,NTamd64.10.0
 
-[NTVAD.NTamd64.10.0...22621]
+[NTVAD.NTamd64.10.0]
 %NTVad.DeviceDesc%=NTVAD_Device, Root\NTVad
 
 [NTVAD_Device.NT]

@@ -261,6 +261,19 @@ ignora `src/`, `sysvad/`, `build/`.
   `BYTE`); include do header no `adapter.cpp` movido para fora do
   `#ifdef SYSVAD_A2DP_SIDEBAND`.
 
+### Instalação (estado no fim da sessão)
+- `devcon.exe` do WDK 26100 está em `Windows Kits\10\Tools\10.0.26100.0\x64`
+  (não em `bin`); `install.ps1` passou a procurar nos dois sítios.
+- O INF decorava a secção como `NTamd64.10.0...22621`, pelo que não casava em
+  Windows 10 19045 ("No matching drivers found in single INF"); passou a
+  `NTamd64.10.0`.
+- `devcon install` criou `ROOT\MEDIA\0000` (instância com o nome da classe) e
+  o pacote foi instalado com sucesso, mas o dispositivo ficou com
+  `CM_PROB_UNSIGNED_DRIVER` (0x34) porque o **testsigning só passa a valer
+  depois de reiniciar** (BCD já em `Yes`).
+- Pendente: reiniciar e confirmar que `ROOT\MEDIA\0000` arranca e expõe os
+  endpoints.
+
 ## 10. Prompt sugerido para retomar com o assistente
 
 > Estou retomando o port do NoiseTorch para Windows no fork

@@ -18,9 +18,16 @@ $ErrorActionPreference = 'Stop'
 $hwid = 'Root\NTVad'
 
 function Get-DevCon {
-    $wdk = "${env:ProgramFiles(x86)}\Windows Kits\10\bin"
-    return Get-ChildItem $wdk -Recurse -Filter devcon.exe -ErrorAction SilentlyContinue |
-        Where-Object FullName -like '*x64*' | Select-Object -First 1 -ExpandProperty FullName
+    $roots = @(
+        "${env:ProgramFiles(x86)}\Windows Kits\10\bin",
+        "${env:ProgramFiles(x86)}\Windows Kits\10\Tools")
+    foreach ($root in $roots) {
+        if (-not (Test-Path $root)) { continue }
+        $tool = Get-ChildItem $root -Recurse -Filter devcon.exe -ErrorAction SilentlyContinue |
+            Where-Object FullName -like '*x64*' | Select-Object -First 1 -ExpandProperty FullName
+        if ($tool) { return $tool }
+    }
+    return $null
 }
 
 $devcon = Get-DevCon
