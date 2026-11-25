@@ -215,16 +215,51 @@ Attestation/EV (Partner Center). Test-signing só serve para desenvolvimento.
 ignora `src/`, `sysvad/`, `build/`.
 
 ### Não verificado
-- Compilação do driver, `inf2cat`, assinatura e instalação (sem WDK).
-- Se o PortCls aceita o INF hand-written (KmdfLibraryVersion 1.15 fixo).
-- Comportamento em tempo real (glitch/underflow) e se o PortCls/Windows aceita
-  a lista de formatos com entradas duplicadas (48 kHz repetido) sem reclamar.
+- Instalação do driver e funcionamento em tempo real (o build assina, mas
+  falta reiniciar com testsigning e correr `install.ps1`).
+- Se o PortCls aceita o INF hand-written e a lista de formatos com entradas
+  48 kHz duplicadas sem reclamar.
 
 ### Próximo passo
-1. Instalar VS 2022 Build Tools + WDK 22621.
-2. `ntvad\build.ps1 -TestSign`, reiniciar, `install.ps1`.
-3. Corrigir erros de compilação do SYSVAD derivado (esperados: nomes de
-   include/libs do projeto) e validar os dois endpoints em Configurações de Som.
+1. Reiniciar (testsigning já ativado) e correr `ntvad\install.ps1`.
+2. Validar os dois endpoints em Configurações de Som (48 kHz/16/estéreo) e o
+   pipeline completo app → ring → app de conferência.
+
+## 9b. Sessão 4 — toolchain e build do driver (2026-11-24)
+
+### Toolchain instalada
+- VS 2022 Build Tools 17.14.45 (`C:\Program Files (x86)\Microsoft Visual
+  Studio\2022\BuildTools`) + Windows SDK 10.0.26100 + WDK 10.1.26100.6584
+  (`wdksetup.exe /q /features + /ceip off /norestart /log <log>`; o
+  `winget install Microsoft.WindowsWDK` falhou com exit 1001).
+- Componentes VS necessários (via `setup.exe modify --add ...`):
+  `Component.Microsoft.Windows.DriverKit.BuildTools` (instala o PlatformToolset
+  `WindowsKernelModeDriver10.0`) e
+  `Microsoft.VisualStudio.Component.VC.Runtimes.x86.x64.Spectre` (o projecto
+  exige libs Spectre — erro MSB8040). `Microsoft.VisualStudio.Component.WDK`
+  não existe no catálogo do Build Tools.
+
+### Pegadinhas de ambiente resolvidas no `build.ps1`
+- Repo em `C:\Windows\System32`: ferramentas 32-bit do WDK (`stampinf`,
+  `inf2cat`) são redirecionadas para SysWOW64 e falham ao escrever. Solução:
+  espelhar `src` para `%TEMP%\ntvad-build` (robocopy /MIR) e compilar lá;
+  `inf2cat` corre sempre num staging em `%TEMP%`.
+- Usar MSBuild/signtool x64 (`Bin\amd64\MSBuild.exe`).
+- KMDF headers ficam em `Windows Kits\10\Include\wdf\kmdf\1.x` (não em
+  `Include\<ver>\wdf`).
+- Compilar só `EndpointsCommon.vcxproj` + `TabletAudioSample.vcxproj`; a
+  solução completa inclui APOs que precisam de ATL.
+- O build produz `TabletAudioSample.sys`, copiado como `NTVad.sys`.
+
+### Verificado nesta sessão
+- `build.ps1 -TestSign` completo: `.sys` e `.cat` assinados (`signtool verify
+  /pa` OK), INF reescrito para KMDF 1.35, `inf2cat` sem erros/avisos,
+  `testsigning` ativado (`bcdedit` → Yes).
+- Artefactos em `build\x64\Release\`: `NTVad.sys` (235 KB), `NTVad.inf`,
+  `NTVad.cat`, `NTVad-test.pfx`.
+- Correções de código: `ntvad_loopback.*` usa `UCHAR` (kernel não define
+  `BYTE`); include do header no `adapter.cpp` movido para fora do
+  `#ifdef SYSVAD_A2DP_SIDEBAND`.
 
 ## 10. Prompt sugerido para retomar com o assistente
 

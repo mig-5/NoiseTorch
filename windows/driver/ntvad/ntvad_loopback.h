@@ -30,7 +30,7 @@
 #define NTVAD_MAX_BACKLOG 4096
 
 typedef struct _NTVAD_LOOPBACK {
-    BYTE        Buffer[NTVAD_RING_BYTES];
+    UCHAR        Buffer[NTVAD_RING_BYTES];
     LONG64      WritePosition;   /* advanced by the render path */
     LONG64      ReadPosition;    /* advanced by the capture path */
     KSPIN_LOCK  Lock;
@@ -48,14 +48,14 @@ VOID NtvadLoopbackInitialize(_Out_ PNTVAD_LOOPBACK Loopback);
  * latency stays bounded. */
 VOID NtvadLoopbackWrite(
     _Inout_ PNTVAD_LOOPBACK Loopback,
-    _In_reads_bytes_(Length) const BYTE* Data,
+    _In_reads_bytes_(Length) const UCHAR* Data,
     _In_ ULONG Length);
 
 /* Pop bytes for the capture endpoint. Missing bytes are zero-filled, so an
  * idle cable reads as silence instead of repeating stale audio. */
 VOID NtvadLoopbackRead(
     _Inout_ PNTVAD_LOOPBACK Loopback,
-    _Out_writes_bytes_(Length) BYTE* Data,
+    _Out_writes_bytes_(Length) UCHAR* Data,
     _In_ ULONG Length);
 
 /* Bytes currently available to the capture endpoint. */

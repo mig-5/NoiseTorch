@@ -30,7 +30,7 @@ NtvadLoopbackInitialize(
 VOID
 NtvadLoopbackWrite(
     _Inout_ PNTVAD_LOOPBACK Loopback,
-    _In_reads_bytes_(Length) const BYTE* Data,
+    _In_reads_bytes_(Length) const UCHAR* Data,
     _In_ ULONG Length)
 {
     KIRQL OldIrql;
@@ -65,7 +65,7 @@ NtvadLoopbackWrite(
 VOID
 NtvadLoopbackRead(
     _Inout_ PNTVAD_LOOPBACK Loopback,
-    _Out_writes_bytes_(Length) BYTE* Data,
+    _Out_writes_bytes_(Length) UCHAR* Data,
     _In_ ULONG Length)
 {
     KIRQL OldIrql;

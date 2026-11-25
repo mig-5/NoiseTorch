@@ -25,13 +25,17 @@ power management) comes from SYSVAD unchanged.
 
 - The derivation script runs and all patches apply cleanly against upstream
   commit `d49bb7d72f3651952b2b6e4ad28d14fe2247eb69` (verified).
-- **The driver has not been compiled.** Visual Studio 2022 + WDK are not
-  installed on the current machine, so build-time correctness is unverified.
+- **The driver compiles, links and test-signs** on VS 2022 Build Tools
+  17.14 + Windows SDK 10.0.26100 + WDK 10.1.26100 (`build.ps1 -TestSign`
+  produces `NTVad.sys`, `NTVad.inf`, `NTVad.cat`). Loading and runtime
+  behaviour are not verified yet.
 
 ## Requirements
 
 - Visual Studio 2022 with **Desktop development with C++**
-- Windows Driver Kit (`winget install Microsoft.WindowsWDK.10.0.22621`)
+- VS components: `Component.Microsoft.Windows.DriverKit.BuildTools` and
+  `Microsoft.VisualStudio.Component.VC.Runtimes.x86.x64.Spectre`
+- Windows Driver Kit 10.1.26100 (SDK 26100 required by the WDK)
 - Administrator PowerShell for build signing and install
 
 ## Usage

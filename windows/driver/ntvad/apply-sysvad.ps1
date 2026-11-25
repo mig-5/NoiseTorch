@@ -210,7 +210,7 @@ Update-Text -Path $stream -Description 'always consume render buffers (drop dump
 $adapter = Join-Path $src 'adapter.cpp'
 
 Update-Text -Path $adapter -Description 'include loopback header in the adapter' `
-    -Pattern '(#include "a2dphpminipairs\.h")' `
+    -Pattern '(#include "minipairs\.h")' `
     -Replacement "`$1`r`n#include `"ntvad_loopback.h`""
 
 Update-Text -Path $adapter -Description 'initialize the loopback ring in DriverEntry' `
